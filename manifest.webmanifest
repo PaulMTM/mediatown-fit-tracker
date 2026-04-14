@@ -1,0 +1,8 @@
+{
+  "name": "MediaTown Fit Tracker",
+  "short_name": "Fit Tracker",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#FAFAFB",
+  "theme_color": "#FAFAFB"
+}
