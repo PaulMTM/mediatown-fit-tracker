@@ -1,93 +1,1108 @@
-const DATA_KEY='mt_fit_v32_data';
-const SETTINGS_KEY='mt_fit_v32_settings';
-const defaultSettings=()=>({mode:'fat_loss',waterGoalL:2.5,city:'Toronto',nudgeStyle:'tough',breakfast:'8:30 AM',lunch:'12:30 PM',dinner:'6:00 PM',cutoff:'8:00 PM',lat:null,lon:null,onboarded:false});
-const modePlans={fat_loss:{1:{type:'Intervals + Finisher',desc:'A harder day built for fat loss and momentum.',bullets:['40-minute treadmill intervals','12-minute finisher','Protein-heavy breakfast','After-dinner walk']},2:{type:'Strength + Bands',desc:'Build muscle so the fat loss looks better, not softer.',bullets:['20 min Apple Fitness Strength','Band squats, rows, shoulder press','Desk reset once during the workday','Protein-first meals']},3:{type:'Intervals + Finisher',desc:'Push the pace, then recover clean.',bullets:['40-minute treadmill intervals','12-minute finisher','500 ml water before meals','After-dinner walk']},4:{type:'Strength + Core',desc:'Tighten the frame.',bullets:['Strength or core session','Bands and planks','Desk reset','Clean dinner timing']},5:{type:'Intervals + Finisher',desc:'Final hard push of the week.',bullets:['40-minute treadmill intervals','12-minute finisher','Keep meals clean','Walk after dinner']},6:{type:'Light Cardio / Walk',desc:'Recover without turning into furniture.',bullets:['Long walk or light treadmill','Optional mobility','Hydrate properly','Controlled meals']},0:{type:'Recovery / Yoga',desc:'Recovery is part of the plan.',bullets:['Stretch or rest','Short walk','Hydrate','Prep for Monday']}},general_fitness:{1:{type:'Steady Cardio',desc:'A smoother cardio day with less punishment.',bullets:['40-minute steady cardio','Optional core work','High-protein breakfast','Move throughout the day']},2:{type:'Strength + Bands',desc:'Build a stronger baseline.',bullets:['20 min Apple Fitness Strength','Band squats, rows, shoulder press','Desk reset','Protein-first meals']},3:{type:'Walk + Mobility',desc:'Move and loosen up.',bullets:['30–40 min brisk walk','10 min mobility','Hydrate','Stay active after dinner']},4:{type:'Strength + Core',desc:'Balanced, simple, effective.',bullets:['Strength or core','Bands and planks','Desk reset','Clean dinner timing']},5:{type:'Cardio Mix',desc:'Good effort without going full savage.',bullets:['40-minute cardio mix','Optional finisher','Keep meals clean','Walk after dinner']},6:{type:'Outdoor Walk / Light Cardio',desc:'Low friction. Just move.',bullets:['Long walk or easy treadmill','Optional yoga','Hydrate','Keep meals under control']},0:{type:'Recovery',desc:'Recover and reset.',bullets:['Stretch or rest','Short walk','Good sleep','Prep for the week']}}};
-let deferredPrompt=null,selectedWaterPreset=null,selectedMealType=null,selectedMealRating=null,selectedWorkoutType=null,editEventMeta=null;
-let currentDay=new Date();
+const DATA_KEY = 'mt_fit_v32_data';
+const SETTINGS_KEY = 'mt_fit_v32_settings';
 
-function dayKey(d=currentDay){return d.toISOString().slice(0,10)}
-function getData(){return JSON.parse(localStorage.getItem(DATA_KEY)||'{}')}
-function setData(d){localStorage.setItem(DATA_KEY,JSON.stringify(d))}
-function getSettings(){return JSON.parse(localStorage.getItem(SETTINGS_KEY)||JSON.stringify(defaultSettings()))}
-function setSettings(s){localStorage.setItem(SETTINGS_KEY,JSON.stringify(s))}
-function ensureDay(key=dayKey()){const d=getData(); if(!d[key]) d[key]={events:[],sleep_hours:null,waist_cm:null,chest_note:'',weather:null,reviewed:false}; setData(d); return d[key]}
-function getDay(key=dayKey()){const d=getData(); return d[key]||{events:[],sleep_hours:null,waist_cm:null,chest_note:'',weather:null,reviewed:false}}
-function updateDay(fn,key=dayKey()){const d=getData(); if(!d[key]) d[key]={events:[],sleep_hours:null,waist_cm:null,chest_note:'',weather:null,reviewed:false}; fn(d[key]); setData(d)}
-function nowTime(){const n=new Date(); return `${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`}
-function formatDate(d){return d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})}
-function getLastNDates(n){const dates=[]; for(let i=0;i<n;i++){const d=new Date(); d.setDate(currentDay.getDate()-i); dates.push(d)} return dates.reverse()}
-function getMode(){return getSettings().mode||'fat_loss'}
-function getPlan(){return modePlans[getMode()][currentDay.getDay()]}
-function parseNum(v){const n=Number(v); return isNaN(n)?0:n}
-function getWaterMl(day){return (day.events||[]).filter(e=>e.type==='water').reduce((s,e)=>s+parseNum(e.amount_ml),0)}
-function mealScore(day){const meals=(day.events||[]).filter(e=>e.type==='meal'); if(!meals.length) return 0; let score=0; meals.forEach(m=>{if(m.rating==='good') score+=100; else if(m.rating==='average') score+=55; else score+=10}); return Math.round(score/meals.length)}
-function workoutScore(day){return (day.events||[]).some(e=>e.type==='workout')?100:0}
-function activityScore(day){const mins=(day.events||[]).filter(e=>e.type==='walk'||e.type==='workout').reduce((s,e)=>s+parseNum(e.duration_min),0); if(mins>=40) return 100; if(mins>=20) return 60; if(mins>0) return 30; return 0}
-function sleepScore(day){const h=parseNum(day.sleep_hours); if(!h) return 0; if(h>=7&&h<=9) return 100; if(h>=6) return 65; if(h>=5) return 30; return 10}
-function waterScore(day){const goalMl=parseNum(getSettings().waterGoalL||2.5)*1000; return Math.round(Math.min(1,getWaterMl(day)/goalMl)*100)}
-function totalScore(day){
-  let score = 100;
-  if(waterScore(day)<100) score -= Math.round((100-waterScore(day))*0.30);
-  if(!((day.events||[]).some(e=>e.type==='workout'))) score -= 30;
-  score -= Math.round((100-mealScore(day))*0.18);
-  score -= Math.round((100-sleepScore(day))*0.12);
-  score -= Math.round((100-activityScore(day))*0.10);
-  return Math.max(0,Math.min(100,score));
+const defaultSettings = () => ({
+  mode: 'fat_loss',
+  waterGoalL: 2.5,
+  city: 'Toronto',
+  nudgeStyle: 'tough',
+  breakfast: '8:30 AM',
+  lunch: '12:30 PM',
+  dinner: '6:00 PM',
+  cutoff: '8:00 PM',
+  lat: null,
+  lon: null,
+  onboarded: false,
+});
+
+const modePlans = {
+  fat_loss: {
+    1: {
+      type: 'Intervals + Finisher',
+      desc: 'A harder day built for fat loss and momentum.',
+      bullets: [
+        '40-minute treadmill intervals',
+        '12-minute finisher',
+        'Protein-heavy breakfast',
+        'After-dinner walk',
+      ],
+    },
+    2: {
+      type: 'Strength + Bands',
+      desc: 'Build muscle so the fat loss looks better, not softer.',
+      bullets: [
+        '20 min Apple Fitness Strength',
+        'Band squats, rows, shoulder press',
+        'Desk reset once during the workday',
+        'Protein-first meals',
+      ],
+    },
+    3: {
+      type: 'Intervals + Finisher',
+      desc: 'Push the pace, then recover clean.',
+      bullets: [
+        '40-minute treadmill intervals',
+        '12-minute finisher',
+        '500 ml water before meals',
+        'After-dinner walk',
+      ],
+    },
+    4: {
+      type: 'Strength + Core',
+      desc: 'Tighten the frame.',
+      bullets: [
+        'Strength or core session',
+        'Bands and planks',
+        'Desk reset',
+        'Clean dinner timing',
+      ],
+    },
+    5: {
+      type: 'Intervals + Finisher',
+      desc: 'Final hard push of the week.',
+      bullets: [
+        '40-minute treadmill intervals',
+        '12-minute finisher',
+        'Keep meals clean',
+        'Walk after dinner',
+      ],
+    },
+    6: {
+      type: 'Light Cardio / Walk',
+      desc: 'Recover without turning into furniture.',
+      bullets: [
+        'Long walk or light treadmill',
+        'Optional mobility',
+        'Hydrate properly',
+        'Controlled meals',
+      ],
+    },
+    0: {
+      type: 'Recovery / Yoga',
+      desc: 'Recovery is part of the plan.',
+      bullets: ['Stretch or rest', 'Short walk', 'Hydrate', 'Prep for Monday'],
+    },
+  },
+  general_fitness: {
+    1: {
+      type: 'Steady Cardio',
+      desc: 'A smoother cardio day with less punishment.',
+      bullets: [
+        '40-minute steady cardio',
+        'Optional core work',
+        'High-protein breakfast',
+        'Move throughout the day',
+      ],
+    },
+    2: {
+      type: 'Strength + Bands',
+      desc: 'Build a stronger baseline.',
+      bullets: [
+        '20 min Apple Fitness Strength',
+        'Band squats, rows, shoulder press',
+        'Desk reset',
+        'Protein-first meals',
+      ],
+    },
+    3: {
+      type: 'Walk + Mobility',
+      desc: 'Move and loosen up.',
+      bullets: [
+        '30–40 min brisk walk',
+        '10 min mobility',
+        'Hydrate',
+        'Stay active after dinner',
+      ],
+    },
+    4: {
+      type: 'Strength + Core',
+      desc: 'Balanced, simple, effective.',
+      bullets: ['Strength or core', 'Bands and planks', 'Desk reset', 'Clean dinner timing'],
+    },
+    5: {
+      type: 'Cardio Mix',
+      desc: 'Good effort without going full savage.',
+      bullets: [
+        '40-minute cardio mix',
+        'Optional finisher',
+        'Keep meals clean',
+        'Walk after dinner',
+      ],
+    },
+    6: {
+      type: 'Outdoor Walk / Light Cardio',
+      desc: 'Low friction. Just move.',
+      bullets: [
+        'Long walk or easy treadmill',
+        'Optional yoga',
+        'Hydrate',
+        'Keep meals under control',
+      ],
+    },
+    0: {
+      type: 'Recovery',
+      desc: 'Recover and reset.',
+      bullets: ['Stretch or rest', 'Short walk', 'Good sleep', 'Prep for the week'],
+    },
+  },
+};
+
+let deferredPrompt = null;
+let selectedWaterPreset = null;
+let selectedMealType = null;
+let selectedMealRating = null;
+let selectedWorkoutType = null;
+let editEventMeta = null;
+let currentDay = new Date();
+
+function dayKey(d = currentDay) {
+  return d.toISOString().slice(0, 10);
 }
-function calculateStreak(){const data=getData(); let streak=0; let cursor=new Date(currentDay); while(true){const key=cursor.toISOString().slice(0,10), day=data[key]; if(day&&(day.events||[]).some(e=>e.type==='workout')){streak++; cursor.setDate(cursor.getDate()-1)} else break} return streak}
-function waistTrend(){const waists=Object.entries(getData()).filter(([_,v])=>v.waist_cm&&!isNaN(parseFloat(v.waist_cm))).sort((a,b)=>a[0].localeCompare(b[0])); if(!waists.length) return null; if(waists.length===1) return {text:`${waists[0][1].waist_cm} cm`,cls:''}; const first=parseFloat(waists[0][1].waist_cm), latest=parseFloat(waists[waists.length-1][1].waist_cm), change=latest-first; return {text:`${change>0?'+':''}${change.toFixed(1)} cm`,cls:change<0?'good':change>0?'bad':''}}
-function addEvent(event){updateDay(day=>day.events.push({...event, id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()+Math.random())}))}
-function renderTop(){const day=getDay(), score=totalScore(day), deg=Math.max(0,Math.min(360,Math.round(score/100*360))); document.getElementById('scoreRing').style.background=`conic-gradient(var(--accent) ${deg}deg,#EDEFF2 ${deg}deg)`; document.getElementById('todayScore').textContent=score; document.getElementById('todayScoreText').textContent=`${score}%`; const waterL=getWaterMl(day)/1000, goalL=parseNum(getSettings().waterGoalL||2.5); document.getElementById('waterProgressText').textContent=`${waterL.toFixed(1)}L / ${goalL.toFixed(1)}L`; document.getElementById('waterBar').style.width=`${Math.min(100,(waterL/goalL)*100)}%`; document.getElementById('streakCount').textContent=calculateStreak(); const wt=waistTrend(), el=document.getElementById('waistTrend'); el.textContent=wt?wt.text:'—'; el.className=`metric ${wt?.cls||''}`}
-function renderPlan(){const plan=getPlan(); document.getElementById('todayDate').textContent=currentDay.toLocaleDateString(undefined,{weekday:'long',year:'numeric',month:'long',day:'numeric'}); document.getElementById('dayTypePill').textContent=plan.type; document.getElementById('workoutTitle').textContent=plan.type; document.getElementById('workoutDesc').textContent=plan.desc; document.getElementById('workoutBullets').innerHTML=plan.bullets.map(i=>`<li>${i}</li>`).join('')}
-function prettyRating(v){if(v==='good') return 'Good'; if(v==='average') return 'Average'; return 'Off Plan'}
-function capitalize(v){return v?v.charAt(0).toUpperCase()+v.slice(1):''}
-function esc(v){return String(v||'').replace(/[&<>\"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[m]))}
-function eventLabel(e){if(e.type==='water') return `Water +${e.amount_ml}ml`; if(e.type==='meal') return `${capitalize(e.meal)} · ${prettyRating(e.rating)}`; if(e.type==='workout') return `${capitalize(e.workout)} · ${e.duration_min} min`; if(e.type==='walk') return `Walk · ${e.duration_min} min`; if(e.type==='sleep') return `Sleep · ${e.hours}h`; if(e.type==='waist') return `Waist · ${e.waist_cm} cm`; return e.type}
-function renderActivityFeed(){const events=[...getDay().events].slice(-8).reverse(); const feed=document.getElementById('activityFeed'); if(!events.length){feed.innerHTML=`<div class="mini">Nothing logged yet for this day. Tap + or use the quick water buttons.</div>`; return} feed.innerHTML=events.map(e=>`<div class="activity-item"><div class="activity-main" data-id="${e.id}"><strong>${eventLabel(e)}</strong>${e.note?`<div class="mini">${esc(e.note)}</div>`:''}</div><div class="mini">${e.time||''}</div></div>`).join(''); feed.querySelectorAll('.activity-main').forEach(el=>el.addEventListener('click',()=>openEditSheet(el.dataset.id)))}
-function chartData(type){return getLastNDates(7).map(date=>{const key=date.toISOString().slice(0,10), day=getDay(key); let value=0; if(type==='water') value=getWaterMl(day)/1000; if(type==='score') value=totalScore(day); return {label:formatDate(date), value}})}
-function drawLineChart(canvasId,data,minMax=null){const canvas=document.getElementById(canvasId), ctx=canvas.getContext('2d'), w=canvas.width,h=canvas.height,pad=30; ctx.clearRect(0,0,w,h); ctx.fillStyle='#FFFFFF'; ctx.fillRect(0,0,w,h); const values=data.map(d=>d.value), max=Math.max(...values,minMax?.[1]??0,1), min=Math.min(...values,minMax?.[0]??max,max), range=max-min||1; ctx.strokeStyle='#E8EAED'; ctx.lineWidth=1; for(let i=0;i<4;i++){const y=pad+((h-pad*2)/3)*i; ctx.beginPath(); ctx.moveTo(pad,y); ctx.lineTo(w-pad,y); ctx.stroke()} ctx.strokeStyle='#95BF47'; ctx.lineWidth=3; ctx.beginPath(); data.forEach((d,i)=>{const x=pad+i*((w-pad*2)/(data.length-1||1)), y=h-pad-((d.value-min)/range)*(h-pad*2); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y)}); ctx.stroke(); ctx.fillStyle='#0F110F'; data.forEach((d,i)=>{const x=pad+i*((w-pad*2)/(data.length-1||1)), y=h-pad-((d.value-min)/range)*(h-pad*2); ctx.beginPath(); ctx.arc(x,y,4.5,0,Math.PI*2); ctx.fill()}); ctx.fillStyle='#676B67'; ctx.font="12px Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"; data.forEach((d,i)=>{const x=pad+i*((w-pad*2)/(data.length-1||1)); ctx.fillText(d.label.split(' ')[0],x-12,h-10)})}
-function renderCharts(){drawLineChart('waterChart',chartData('water')); drawLineChart('scoreChart',chartData('score'),[0,100])}
-function renderWeeklyTable(){const rows=getLastNDates(7).map(date=>{const key=date.toISOString().slice(0,10), day=getDay(key), water=(getWaterMl(day)/1000).toFixed(1)+'L', workout=(day.events||[]).some(e=>e.type==='workout')?'✔':'—', sleep=day.sleep_hours?`${day.sleep_hours}h`:'—'; return `<tr><td>${formatDate(date)}</td><td>${totalScore(day)}%</td><td>${water}</td><td>${workout}</td><td>${sleep}</td></tr>`}); document.getElementById('weeklyTableBody').innerHTML=rows.join('')}
-function weatherModeSummary(cond, hasActivity, style){ if(style==='calm'){ if(['Rainy','Cold','Windy'].includes(cond)) return hasActivity?'You already moved. Keep the evening simple.':'Indoor day. A short treadmill session is enough.'; return hasActivity?'You have movement logged already. Nice work.':'Decent weather. A quick walk would help.' } else { if(['Rainy','Cold','Windy'].includes(cond)) return hasActivity?'You already moved. Nice. Keep dinner clean.':\"Weather isn't great. Treadmill + bands keeps the streak alive.\"; return hasActivity?\"You’ve already got movement logged. Good work.\":'Good day for a walk if you do not want the treadmill.' }}
-function renderWeatherCard(){const weather=getDay().weather; const tag=document.getElementById('weatherTag'), summary=document.getElementById('weatherSummary'), nudge=document.getElementById('weatherNudge'); if(!weather){tag.textContent='Weather unavailable'; summary.textContent='Use current location or set your nearest major city in Settings.'; nudge.textContent=\"No excuses. Log something anyway.\"; return} const temp=Math.round(weather.temp_c); let cond=weather.precip_mm>.2?'Rainy':weather.wind_kph>25?'Windy':weather.temp_c<5?'Cold':weather.temp_c>26?'Warm':'Mild'; tag.textContent=`${cond} · ${temp}°C`; const hasActivity=(getDay().events||[]).some(e=>e.type==='walk'||e.type==='workout'); summary.textContent=['Rainy','Cold','Windy'].includes(cond)?`${cond} day outside. Better indoor play today.`:`${cond} and workable. Easy win if you get outside.`; nudge.textContent=weatherModeSummary(cond,hasActivity,getSettings().nudgeStyle||'tough')}
-async function fetchWeatherByCoords(lat,lon){try{const url=`https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lon)}&current=temperature_2m,precipitation,wind_speed_10m&timezone=auto`; const res=await fetch(url); const data=await res.json(); const cur=data.current||{}; updateDay(day=>day.weather={temp_c:parseNum(cur.temperature_2m),precip_mm:parseNum(cur.precipitation),wind_kph:parseNum(cur.wind_speed_10m)}); renderWeatherCard()} catch {renderWeatherCard()}}
-async function fetchWeatherByCity(city){ try{const geo=await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=en&format=json`); const geoData=await geo.json(); const first=(geoData.results||[])[0]; if(!first) return renderWeatherCard(); const s=getSettings(); s.lat=first.latitude; s.lon=first.longitude; s.city=first.name; setSettings(s); await fetchWeatherByCoords(first.latitude, first.longitude)} catch {renderWeatherCard()} }
-function initWeather(){const s=getSettings(); if(s.lat&&s.lon) fetchWeatherByCoords(s.lat,s.lon); else if(s.city) fetchWeatherByCity(s.city); else renderWeatherCard()}
-function loadSettingsUI(){const s=getSettings(); document.getElementById('waterGoalInput').value=s.waterGoalL??2.5; document.getElementById('cityInput').value=s.city??'Toronto'; document.getElementById('nudgeSelect').value=s.nudgeStyle??'tough'; document.getElementById('modeSelect').value=s.mode??'fat_loss'}
-function saveSettings(){const s=getSettings(); s.waterGoalL=parseNum(document.getElementById('waterGoalInput').value||2.5); s.city=document.getElementById('cityInput').value||'Toronto'; s.nudgeStyle=document.getElementById('nudgeSelect').value||'tough'; s.mode=document.getElementById('modeSelect').value||'fat_loss'; setSettings(s); renderAll(); fetchWeatherByCity(s.city)}
-function markReviewed(){updateDay(day=>day.reviewed=true); closeSheets(); renderAll()}
-function openSheet(id){document.getElementById('sheetBackdrop').classList.add('show'); document.querySelectorAll('.sheet').forEach(el=>el.classList.remove('show')); document.getElementById(id).classList.add('show'); document.getElementById('fab').classList.remove('open')}
-function closeSheets(){document.getElementById('sheetBackdrop').classList.remove('show'); document.querySelectorAll('.sheet').forEach(el=>el.classList.remove('show'))}
-function setupFAB(){const fab=document.getElementById('fab'); document.getElementById('fabBtn').addEventListener('click',()=>fab.classList.toggle('open')); fab.querySelectorAll('[data-action]').forEach(btn=>btn.addEventListener('click',()=>{const action=btn.dataset.action; if(action==='review') openSheet('reviewSheet'); else {openSheet(`${action}Sheet`); ['waterTime','mealTime','workoutTime','sleepTime','waistTime','walkTime'].forEach(id=>{const el=document.getElementById(id); if(el) el.value=nowTime()})}})); document.getElementById('sheetBackdrop').addEventListener('click',closeSheets); document.querySelectorAll('.close-sheet').forEach(btn=>btn.addEventListener('click',closeSheets))}
-function setChoiceGroup(containerId,cb){document.querySelectorAll(`#${containerId} .choice`).forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll(`#${containerId} .choice`).forEach(b=>b.classList.remove('active')); btn.classList.add('active'); cb(btn.dataset.amount||btn.dataset.value)}))}
-function saveWater(){const custom=parseNum(document.getElementById('waterCustom').value), amount=custom||parseNum(selectedWaterPreset); if(!amount) return alert('Pick or enter a water amount.'); addEvent({type:'water',amount_ml:amount,time:document.getElementById('waterTime').value||nowTime()}); selectedWaterPreset=null; document.getElementById('waterCustom').value=''; document.querySelectorAll('#waterChoices .choice').forEach(b=>b.classList.remove('active')); closeSheets(); renderAll()}
-function saveMeal(){if(!selectedMealType||!selectedMealRating) return alert('Choose the meal and rating.'); addEvent({type:'meal',meal:selectedMealType,rating:selectedMealRating,note:document.getElementById('mealNote').value.trim(),time:document.getElementById('mealTime').value||nowTime()}); selectedMealType=null; selectedMealRating=null; document.getElementById('mealNote').value=''; document.querySelectorAll('#mealTypeChoices .choice,#mealRatingChoices .choice').forEach(b=>b.classList.remove('active')); closeSheets(); renderAll()}
-function saveWorkout(){const dur=parseNum(document.getElementById('workoutDuration').value); if(!selectedWorkoutType||!dur) return alert('Choose workout type and duration.'); addEvent({type:'workout',workout:selectedWorkoutType,duration_min:dur,time:document.getElementById('workoutTime').value||nowTime()}); selectedWorkoutType=null; document.getElementById('workoutDuration').value=''; document.querySelectorAll('#workoutTypeChoices .choice').forEach(b=>b.classList.remove('active')); closeSheets(); renderAll()}
-function saveSleep(){const hours=parseNum(document.getElementById('sleepHours').value); if(!hours) return alert('Enter sleep hours.'); updateDay(day=>{day.sleep_hours=hours; day.events.push({type:'sleep',hours,time:document.getElementById('sleepTime').value||nowTime(),id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now()+Math.random())})}); document.getElementById('sleepHours').value=''; closeSheets(); renderAll()}
-function saveWaist(){const waist=parseNum(document.getElementById('waistValue').value); if(!waist) return alert('Enter waist in cm.'); const chest=document.getElementById('chestNote').value; updateDay(day=>{day.waist_cm=waist; day.chest_note=chest; day.events.push({type:'waist',waist_cm:waist,note:chest,time:document.getElementById('waistTime').value||nowTime(),id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now()+Math.random())})}); document.getElementById('waistValue').value=''; document.getElementById('chestNote').value=''; closeSheets(); renderAll()}
-function saveWalk(){const dur=parseNum(document.getElementById('walkDuration').value); if(!dur) return alert('Enter walk duration.'); addEvent({type:'walk',duration_min:dur,time:document.getElementById('walkTime').value||nowTime()}); document.getElementById('walkDuration').value=''; closeSheets(); renderAll()}
-function openEditSheet(eventId){const day=getDay(); const event=(day.events||[]).find(e=>e.id===eventId); if(!event) return; editEventMeta={id:eventId,type:event.type}; let value=''; if(event.type==='water') value=event.amount_ml; else if(event.type==='meal') value=event.note||event.rating; else if(event.type==='workout'||event.type==='walk') value=event.duration_min; else if(event.type==='sleep') value=event.hours; else if(event.type==='waist') value=event.waist_cm; document.getElementById('editValue').value=value||''; document.getElementById('editTime').value=event.time||nowTime(); openSheet('editSheet')}
-function saveEdit(){if(!editEventMeta) return; updateDay(day=>{const idx=(day.events||[]).findIndex(e=>e.id===editEventMeta.id); if(idx<0) return; const event=day.events[idx]; const val=document.getElementById('editValue').value; event.time=document.getElementById('editTime').value||event.time; if(event.type==='water') event.amount_ml=parseNum(val); else if(event.type==='meal') event.note=val; else if(event.type==='workout'||event.type==='walk') event.duration_min=parseNum(val); else if(event.type==='sleep'){event.hours=parseNum(val); day.sleep_hours=parseNum(val)} else if(event.type==='waist'){event.waist_cm=parseNum(val); day.waist_cm=parseNum(val)} }); closeSheets(); renderAll()}
-function deleteEvent(){if(!editEventMeta) return; updateDay(day=>{day.events=(day.events||[]).filter(e=>e.id!==editEventMeta.id)}); closeSheets(); renderAll()}
-function exportData(){const payload={data:getData(),settings:getSettings()}; const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='mediatown-fit-tracker-v3-2-data.json'; a.click(); URL.revokeObjectURL(url)}
-function importData(file){const reader=new FileReader(); reader.onload=()=>{try{const imported=JSON.parse(reader.result); if(imported.data) setData(imported.data); else setData(imported); if(imported.settings) setSettings(imported.settings); renderAll(); initWeather()} catch {alert('Import failed. That file is not valid tracker data.')}}; reader.readAsText(file)}
-function resetAll(){if(!confirm('Reset all tracker data from this browser?')) return; localStorage.removeItem(DATA_KEY); localStorage.removeItem(SETTINGS_KEY); location.reload()}
-function checkOnboarding(){const s=getSettings(); if(!s.onboarded) document.getElementById('onboard').classList.add('show')}
-function finishOnboarding(){const s=getSettings(); s.mode=document.getElementById('obGoal').value||'fat_loss'; s.waterGoalL=parseNum(document.getElementById('obWaterGoal').value||2.5); s.city=document.getElementById('obCity').value||'Toronto'; s.nudgeStyle=document.getElementById('obNudge').value||'tough'; s.breakfast=document.getElementById('obBreakfast').value||'8:30 AM'; s.lunch=document.getElementById('obLunch').value||'12:30 PM'; s.dinner=document.getElementById('obDinner').value||'6:00 PM'; s.cutoff=document.getElementById('obCutoff').value||'8:00 PM'; s.onboarded=true; setSettings(s); document.getElementById('onboard').classList.remove('show'); renderAll(); fetchWeatherByCity(s.city)}
-function renderDayLabel(){document.getElementById('dayLabel').textContent = currentDay.toDateString()===new Date().toDateString() ? 'Today' : currentDay.toDateString()}
-function prevDay(){currentDay.setDate(currentDay.getDate()-1); renderAll()}
-function nextDay(){const tomorrow=new Date(); tomorrow.setHours(0,0,0,0); const candidate=new Date(currentDay); candidate.setDate(candidate.getDate()+1); if(candidate > tomorrow) return; currentDay = candidate; renderAll()}
-function renderAll(){ensureDay(dayKey()); loadSettingsUI(); renderDayLabel(); renderPlan(); renderTop(); renderActivityFeed(); renderCharts(); renderWeeklyTable(); renderWeatherCard()}
-function useCurrentLocation(){ if(!navigator.geolocation) return alert('Geolocation not available on this device.'); navigator.geolocation.getCurrentPosition(pos=>{const s=getSettings(); s.lat=pos.coords.latitude; s.lon=pos.coords.longitude; setSettings(s); fetchWeatherByCoords(s.lat,s.lon)},()=>alert('Location permission denied.'),{enableHighAccuracy:false,timeout:5000,maximumAge:3600000})}
-function setupEvents(){document.getElementById('prevDayBtn').addEventListener('click',prevDay); document.getElementById('nextDayBtn').addEventListener('click',nextDay); document.getElementById('saveSettingsBtn').addEventListener('click',saveSettings); document.getElementById('exportBtn').addEventListener('click',exportData); document.getElementById('importBtn').addEventListener('click',()=>document.getElementById('importFile').click()); document.getElementById('importFile').addEventListener('change',e=>{const f=e.target.files[0]; if(f) importData(f)}); document.getElementById('clearBtn').addEventListener('click',resetAll); document.getElementById('useLocationBtn').addEventListener('click',useCurrentLocation); document.getElementById('finishOnboardingBtn').addEventListener('click',finishOnboarding); document.getElementById('reviewDayBtn').addEventListener('click',markReviewed); document.getElementById('saveEditBtn').addEventListener('click',saveEdit); document.getElementById('deleteEventBtn').addEventListener('click',deleteEvent);
-  setChoiceGroup('waterChoices',v=>selectedWaterPreset=v); setChoiceGroup('mealTypeChoices',v=>selectedMealType=v); setChoiceGroup('mealRatingChoices',v=>selectedMealRating=v); setChoiceGroup('workoutTypeChoices',v=>selectedWorkoutType=v);
-  document.querySelectorAll('[data-water]').forEach(btn=>btn.addEventListener('click',()=>{addEvent({type:'water',amount_ml:parseNum(btn.dataset.water),time:nowTime()}); renderAll()}));
-  document.getElementById('saveWaterBtn').addEventListener('click',saveWater); document.getElementById('saveMealBtn').addEventListener('click',saveMeal); document.getElementById('saveWorkoutBtn').addEventListener('click',saveWorkout); document.getElementById('saveSleepBtn').addEventListener('click',saveSleep); document.getElementById('saveWaistBtn').addEventListener('click',saveWaist); document.getElementById('saveWalkBtn').addEventListener('click',saveWalk); document.getElementById('openHealthBtn').addEventListener('click',()=>{window.location.href='x-apple-health://'})}
-window.addEventListener('beforeinstallprompt',e=>{e.preventDefault(); deferredPrompt=e; document.getElementById('installBtn').classList.remove('hidden'); document.getElementById('installHelp').textContent='Install is available in this browser.'});
-document.getElementById('installBtn').addEventListener('click',async()=>{if(!deferredPrompt) return; deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt=null; document.getElementById('installBtn').classList.add('hidden')});
-function setupFAB(){const fab=document.getElementById('fab'); document.getElementById('fabBtn').addEventListener('click',()=>fab.classList.toggle('open')); fab.querySelectorAll('[data-action]').forEach(btn=>btn.addEventListener('click',()=>{const action=btn.dataset.action; if(action==='review') openSheet('reviewSheet'); else {openSheet(`${action}Sheet`); ['waterTime','mealTime','workoutTime','sleepTime','waistTime','walkTime'].forEach(id=>{const el=document.getElementById(id); if(el) el.value=nowTime()})}})); document.getElementById('sheetBackdrop').addEventListener('click',closeSheets); document.querySelectorAll('.close-sheet').forEach(btn=>btn.addEventListener('click',closeSheets))}
-function openSheet(id){document.getElementById('sheetBackdrop').classList.add('show'); document.querySelectorAll('.sheet').forEach(el=>el.classList.remove('show')); document.getElementById(id).classList.add('show'); document.getElementById('fab').classList.remove('open')}
-function closeSheets(){document.getElementById('sheetBackdrop').classList.remove('show'); document.querySelectorAll('.sheet').forEach(el=>el.classList.remove('show'))}
-function setChoiceGroup(containerId,cb){document.querySelectorAll(`#${containerId} .choice`).forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll(`#${containerId} .choice`).forEach(b=>b.classList.remove('active')); btn.classList.add('active'); cb(btn.dataset.amount||btn.dataset.value)}))}
-if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
-ensureDay(); setupFAB(); setupEvents(); renderAll(); checkOnboarding(); initWeather();
+
+function getData() {
+  return JSON.parse(localStorage.getItem(DATA_KEY) || '{}');
+}
+
+function setData(d) {
+  localStorage.setItem(DATA_KEY, JSON.stringify(d));
+}
+
+function getSettings() {
+  return JSON.parse(localStorage.getItem(SETTINGS_KEY) || JSON.stringify(defaultSettings()));
+}
+
+function setSettings(s) {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+}
+
+function ensureDay(key = dayKey()) {
+  const d = getData();
+  if (!d[key]) {
+    d[key] = {
+      events: [],
+      sleep_hours: null,
+      waist_cm: null,
+      chest_note: '',
+      weather: null,
+      reviewed: false,
+    };
+  }
+  setData(d);
+  return d[key];
+}
+
+function getDay(key = dayKey()) {
+  const d = getData();
+  return (
+    d[key] || {
+      events: [],
+      sleep_hours: null,
+      waist_cm: null,
+      chest_note: '',
+      weather: null,
+      reviewed: false,
+    }
+  );
+}
+
+function updateDay(fn, key = dayKey()) {
+  const d = getData();
+  if (!d[key]) {
+    d[key] = {
+      events: [],
+      sleep_hours: null,
+      waist_cm: null,
+      chest_note: '',
+      weather: null,
+      reviewed: false,
+    };
+  }
+  fn(d[key]);
+  setData(d);
+}
+
+function nowTime() {
+  const n = new Date();
+  return `${String(n.getHours()).padStart(2, '0')}:${String(n.getMinutes()).padStart(2, '0')}`;
+}
+
+function formatDate(d) {
+  return d.toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+function getLastNDates(n) {
+  const dates = [];
+  for (let i = 0; i < n; i += 1) {
+    const d = new Date(currentDay);
+    d.setDate(currentDay.getDate() - i);
+    dates.push(d);
+  }
+  return dates.reverse();
+}
+
+function getMode() {
+  return getSettings().mode || 'fat_loss';
+}
+
+function getPlan() {
+  return modePlans[getMode()][currentDay.getDay()];
+}
+
+function parseNum(v) {
+  const n = Number(v);
+  return Number.isNaN(n) ? 0 : n;
+}
+
+function getWaterMl(day) {
+  return (day.events || [])
+    .filter((e) => e.type === 'water')
+    .reduce((s, e) => s + parseNum(e.amount_ml), 0);
+}
+
+function mealScore(day) {
+  const meals = (day.events || []).filter((e) => e.type === 'meal');
+  if (!meals.length) return 0;
+
+  let score = 0;
+  meals.forEach((m) => {
+    if (m.rating === 'good') score += 100;
+    else if (m.rating === 'average') score += 55;
+    else score += 10;
+  });
+
+  return Math.round(score / meals.length);
+}
+
+function workoutScore(day) {
+  return (day.events || []).some((e) => e.type === 'workout') ? 100 : 0;
+}
+
+function activityScore(day) {
+  const mins = (day.events || [])
+    .filter((e) => e.type === 'walk' || e.type === 'workout')
+    .reduce((s, e) => s + parseNum(e.duration_min), 0);
+
+  if (mins >= 40) return 100;
+  if (mins >= 20) return 60;
+  if (mins > 0) return 30;
+  return 0;
+}
+
+function sleepScore(day) {
+  const h = parseNum(day.sleep_hours);
+  if (!h) return 0;
+  if (h >= 7 && h <= 9) return 100;
+  if (h >= 6) return 65;
+  if (h >= 5) return 30;
+  return 10;
+}
+
+function waterScore(day) {
+  const goalMl = parseNum(getSettings().waterGoalL || 2.5) * 1000;
+  return Math.round(Math.min(1, getWaterMl(day) / goalMl) * 100);
+}
+
+function totalScore(day) {
+  let score = 100;
+
+  if (waterScore(day) < 100) score -= Math.round((100 - waterScore(day)) * 0.3);
+  if (!(day.events || []).some((e) => e.type === 'workout')) score -= 30;
+  score -= Math.round((100 - mealScore(day)) * 0.18);
+  score -= Math.round((100 - sleepScore(day)) * 0.12);
+  score -= Math.round((100 - activityScore(day)) * 0.1);
+
+  return Math.max(0, Math.min(100, score));
+}
+
+function calculateStreak() {
+  const data = getData();
+  let streak = 0;
+  const cursor = new Date(currentDay);
+
+  while (true) {
+    const key = cursor.toISOString().slice(0, 10);
+    const day = data[key];
+    if (day && (day.events || []).some((e) => e.type === 'workout')) {
+      streak += 1;
+      cursor.setDate(cursor.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+
+  return streak;
+}
+
+function waistTrend() {
+  const waists = Object.entries(getData())
+    .filter(([_, v]) => v.waist_cm && !Number.isNaN(parseFloat(v.waist_cm)))
+    .sort((a, b) => a[0].localeCompare(b[0]));
+
+  if (!waists.length) return null;
+  if (waists.length === 1) {
+    return { text: `${waists[0][1].waist_cm} cm`, cls: '' };
+  }
+
+  const first = parseFloat(waists[0][1].waist_cm);
+  const latest = parseFloat(waists[waists.length - 1][1].waist_cm);
+  const change = latest - first;
+
+  return {
+    text: `${change > 0 ? '+' : ''}${change.toFixed(1)} cm`,
+    cls: change < 0 ? 'good' : change > 0 ? 'bad' : '',
+  };
+}
+
+function makeId() {
+  if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+    return window.crypto.randomUUID();
+  }
+  return String(Date.now() + Math.random());
+}
+
+function addEvent(event) {
+  updateDay((day) => {
+    day.events.push({ ...event, id: makeId() });
+  });
+}
+
+function renderTop() {
+  const day = getDay();
+  const score = totalScore(day);
+  const deg = Math.max(0, Math.min(360, Math.round((score / 100) * 360)));
+
+  document.getElementById('scoreRing').style.background =
+    `conic-gradient(var(--accent) ${deg}deg,#EDEFF2 ${deg}deg)`;
+  document.getElementById('todayScore').textContent = score;
+  document.getElementById('todayScoreText').textContent = `${score}%`;
+
+  const waterL = getWaterMl(day) / 1000;
+  const goalL = parseNum(getSettings().waterGoalL || 2.5);
+  document.getElementById('waterProgressText').textContent = `${waterL.toFixed(1)}L / ${goalL.toFixed(1)}L`;
+  document.getElementById('waterBar').style.width = `${Math.min(100, (waterL / goalL) * 100)}%`;
+
+  document.getElementById('streakCount').textContent = calculateStreak();
+
+  const wt = waistTrend();
+  const el = document.getElementById('waistTrend');
+  el.textContent = wt ? wt.text : '—';
+  el.className = `metric ${wt?.cls || ''}`;
+}
+
+function renderPlan() {
+  const plan = getPlan();
+  document.getElementById('todayDate').textContent = currentDay.toLocaleDateString(undefined, {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+  document.getElementById('dayTypePill').textContent = plan.type;
+  document.getElementById('workoutTitle').textContent = plan.type;
+  document.getElementById('workoutDesc').textContent = plan.desc;
+  document.getElementById('workoutBullets').innerHTML = plan.bullets.map((i) => `<li>${i}</li>`).join('');
+}
+
+function prettyRating(v) {
+  if (v === 'good') return 'Good';
+  if (v === 'average') return 'Average';
+  return 'Off Plan';
+}
+
+function capitalize(v) {
+  return v ? v.charAt(0).toUpperCase() + v.slice(1) : '';
+}
+
+function esc(v) {
+  return String(v || '').replace(/[&<>"']/g, (m) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[m]));
+}
+
+function eventLabel(e) {
+  if (e.type === 'water') return `Water +${e.amount_ml}ml`;
+  if (e.type === 'meal') return `${capitalize(e.meal)} · ${prettyRating(e.rating)}`;
+  if (e.type === 'workout') return `${capitalize(e.workout)} · ${e.duration_min} min`;
+  if (e.type === 'walk') return `Walk · ${e.duration_min} min`;
+  if (e.type === 'sleep') return `Sleep · ${e.hours}h`;
+  if (e.type === 'waist') return `Waist · ${e.waist_cm} cm`;
+  return e.type;
+}
+
+function renderActivityFeed() {
+  const events = [...getDay().events].slice(-8).reverse();
+  const feed = document.getElementById('activityFeed');
+
+  if (!events.length) {
+    feed.innerHTML = '<div class="mini">Nothing logged yet for this day. Tap + or use the quick water buttons.</div>';
+    return;
+  }
+
+  feed.innerHTML = events
+    .map((e) => (
+      `<div class="activity-item">
+        <div class="activity-main" data-id="${e.id}">
+          <strong>${eventLabel(e)}</strong>
+          ${e.note ? `<div class="mini">${esc(e.note)}</div>` : ''}
+        </div>
+        <div class="mini">${e.time || ''}</div>
+      </div>`
+    ))
+    .join('');
+
+  feed.querySelectorAll('.activity-main').forEach((el) => {
+    el.addEventListener('click', () => openEditSheet(el.dataset.id));
+  });
+}
+
+function chartData(type) {
+  return getLastNDates(7).map((date) => {
+    const key = date.toISOString().slice(0, 10);
+    const day = getDay(key);
+    let value = 0;
+    if (type === 'water') value = getWaterMl(day) / 1000;
+    if (type === 'score') value = totalScore(day);
+    return { label: formatDate(date), value };
+  });
+}
+
+function drawLineChart(canvasId, data, minMax = null) {
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width;
+  const h = canvas.height;
+  const pad = 30;
+
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, w, h);
+
+  const values = data.map((d) => d.value);
+  const max = Math.max(...values, minMax?.[1] ?? 0, 1);
+  const min = Math.min(...values, minMax?.[0] ?? max, max);
+  const range = max - min || 1;
+
+  ctx.strokeStyle = '#E8EAED';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 4; i += 1) {
+    const y = pad + (((h - pad * 2) / 3) * i);
+    ctx.beginPath();
+    ctx.moveTo(pad, y);
+    ctx.lineTo(w - pad, y);
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle = '#95BF47';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  data.forEach((d, i) => {
+    const x = pad + (i * ((w - pad * 2) / (data.length - 1 || 1)));
+    const y = h - pad - (((d.value - min) / range) * (h - pad * 2));
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  ctx.fillStyle = '#0F110F';
+  data.forEach((d, i) => {
+    const x = pad + (i * ((w - pad * 2) / (data.length - 1 || 1)));
+    const y = h - pad - (((d.value - min) / range) * (h - pad * 2));
+    ctx.beginPath();
+    ctx.arc(x, y, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  ctx.fillStyle = '#676B67';
+  ctx.font = '12px Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif';
+  data.forEach((d, i) => {
+    const x = pad + (i * ((w - pad * 2) / (data.length - 1 || 1)));
+    ctx.fillText(d.label.split(' ')[0], x - 12, h - 10);
+  });
+}
+
+function renderCharts() {
+  drawLineChart('waterChart', chartData('water'));
+  drawLineChart('scoreChart', chartData('score'), [0, 100]);
+}
+
+function renderWeeklyTable() {
+  const rows = getLastNDates(7).map((date) => {
+    const key = date.toISOString().slice(0, 10);
+    const day = getDay(key);
+    const water = `${(getWaterMl(day) / 1000).toFixed(1)}L`;
+    const workout = (day.events || []).some((e) => e.type === 'workout') ? '✔' : '—';
+    const sleep = day.sleep_hours ? `${day.sleep_hours}h` : '—';
+    return `<tr><td>${formatDate(date)}</td><td>${totalScore(day)}%</td><td>${water}</td><td>${workout}</td><td>${sleep}</td></tr>`;
+  });
+
+  document.getElementById('weeklyTableBody').innerHTML = rows.join('');
+}
+
+function weatherModeSummary(cond, hasActivity, style) {
+  if (style === 'calm') {
+    if (['Rainy', 'Cold', 'Windy'].includes(cond)) {
+      return hasActivity
+        ? 'You already moved. Keep the evening simple.'
+        : 'Indoor day. A short treadmill session is enough.';
+    }
+    return hasActivity
+      ? 'You have movement logged already. Nice work.'
+      : 'Decent weather. A quick walk would help.';
+  }
+
+  if (['Rainy', 'Cold', 'Windy'].includes(cond)) {
+    return hasActivity
+      ? 'You already moved. Nice. Keep dinner clean.'
+      : "Weather isn't great. Treadmill + bands keeps the streak alive.";
+  }
+
+  return hasActivity
+    ? "You’ve already got movement logged. Good work."
+    : 'Good day for a walk if you do not want the treadmill.';
+}
+
+function renderWeatherCard() {
+  const weather = getDay().weather;
+  const tag = document.getElementById('weatherTag');
+  const summary = document.getElementById('weatherSummary');
+  const nudge = document.getElementById('weatherNudge');
+
+  if (!weather) {
+    tag.textContent = 'Weather unavailable';
+    summary.textContent = 'Use current location or set your nearest major city in Settings.';
+    nudge.textContent = 'No excuses. Log something anyway.';
+    return;
+  }
+
+  const temp = Math.round(weather.temp_c);
+  let cond = 'Mild';
+  if (weather.precip_mm > 0.2) cond = 'Rainy';
+  else if (weather.wind_kph > 25) cond = 'Windy';
+  else if (weather.temp_c < 5) cond = 'Cold';
+  else if (weather.temp_c > 26) cond = 'Warm';
+
+  tag.textContent = `${cond} · ${temp}°C`;
+
+  const hasActivity = (getDay().events || []).some((e) => e.type === 'walk' || e.type === 'workout');
+  summary.textContent = ['Rainy', 'Cold', 'Windy'].includes(cond)
+    ? `${cond} day outside. Better indoor play today.`
+    : `${cond} and workable. Easy win if you get outside.`;
+
+  nudge.textContent = weatherModeSummary(cond, hasActivity, getSettings().nudgeStyle || 'tough');
+}
+
+async function fetchWeatherByCoords(lat, lon) {
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lon)}&current=temperature_2m,precipitation,wind_speed_10m&timezone=auto`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const cur = data.current || {};
+
+    updateDay((day) => {
+      day.weather = {
+        temp_c: parseNum(cur.temperature_2m),
+        precip_mm: parseNum(cur.precipitation),
+        wind_kph: parseNum(cur.wind_speed_10m),
+      };
+    });
+
+    renderWeatherCard();
+  } catch {
+    renderWeatherCard();
+  }
+}
+
+async function fetchWeatherByCity(city) {
+  try {
+    const geo = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=en&format=json`);
+    const geoData = await geo.json();
+    const first = (geoData.results || [])[0];
+    if (!first) {
+      renderWeatherCard();
+      return;
+    }
+
+    const s = getSettings();
+    s.lat = first.latitude;
+    s.lon = first.longitude;
+    s.city = first.name;
+    setSettings(s);
+
+    await fetchWeatherByCoords(first.latitude, first.longitude);
+  } catch {
+    renderWeatherCard();
+  }
+}
+
+function initWeather() {
+  const s = getSettings();
+  if (s.lat && s.lon) fetchWeatherByCoords(s.lat, s.lon);
+  else if (s.city) fetchWeatherByCity(s.city);
+  else renderWeatherCard();
+}
+
+function loadSettingsUI() {
+  const s = getSettings();
+  document.getElementById('waterGoalInput').value = s.waterGoalL ?? 2.5;
+  document.getElementById('cityInput').value = s.city ?? 'Toronto';
+  document.getElementById('nudgeSelect').value = s.nudgeStyle ?? 'tough';
+  document.getElementById('modeSelect').value = s.mode ?? 'fat_loss';
+}
+
+function saveSettings() {
+  const s = getSettings();
+  s.waterGoalL = parseNum(document.getElementById('waterGoalInput').value || 2.5);
+  s.city = document.getElementById('cityInput').value || 'Toronto';
+  s.nudgeStyle = document.getElementById('nudgeSelect').value || 'tough';
+  s.mode = document.getElementById('modeSelect').value || 'fat_loss';
+  setSettings(s);
+  renderAll();
+  fetchWeatherByCity(s.city);
+}
+
+function markReviewed() {
+  updateDay((day) => {
+    day.reviewed = true;
+  });
+  closeSheets();
+  renderAll();
+}
+
+function openSheet(id) {
+  document.getElementById('sheetBackdrop').classList.add('show');
+  document.querySelectorAll('.sheet').forEach((el) => el.classList.remove('show'));
+  document.getElementById(id).classList.add('show');
+  document.getElementById('fab').classList.remove('open');
+}
+
+function closeSheets() {
+  document.getElementById('sheetBackdrop').classList.remove('show');
+  document.querySelectorAll('.sheet').forEach((el) => el.classList.remove('show'));
+}
+
+function setupFAB() {
+  const fab = document.getElementById('fab');
+
+  document.getElementById('fabBtn').addEventListener('click', () => {
+    fab.classList.toggle('open');
+  });
+
+  fab.querySelectorAll('[data-action]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const action = btn.dataset.action;
+      if (action === 'review') {
+        openSheet('reviewSheet');
+      } else {
+        openSheet(`${action}Sheet`);
+        ['waterTime', 'mealTime', 'workoutTime', 'sleepTime', 'waistTime', 'walkTime'].forEach((id) => {
+          const el = document.getElementById(id);
+          if (el) el.value = nowTime();
+        });
+      }
+    });
+  });
+
+  document.getElementById('sheetBackdrop').addEventListener('click', closeSheets);
+  document.querySelectorAll('.close-sheet').forEach((btn) => {
+    btn.addEventListener('click', closeSheets);
+  });
+}
+
+function setChoiceGroup(containerId, cb) {
+  document.querySelectorAll(`#${containerId} .choice`).forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll(`#${containerId} .choice`).forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      cb(btn.dataset.amount || btn.dataset.value);
+    });
+  });
+}
+
+function saveWater() {
+  const custom = parseNum(document.getElementById('waterCustom').value);
+  const amount = custom || parseNum(selectedWaterPreset);
+
+  if (!amount) {
+    alert('Pick or enter a water amount.');
+    return;
+  }
+
+  addEvent({
+    type: 'water',
+    amount_ml: amount,
+    time: document.getElementById('waterTime').value || nowTime(),
+  });
+
+  selectedWaterPreset = null;
+  document.getElementById('waterCustom').value = '';
+  document.querySelectorAll('#waterChoices .choice').forEach((b) => b.classList.remove('active'));
+  closeSheets();
+  renderAll();
+}
+
+function saveMeal() {
+  if (!selectedMealType || !selectedMealRating) {
+    alert('Choose the meal and rating.');
+    return;
+  }
+
+  addEvent({
+    type: 'meal',
+    meal: selectedMealType,
+    rating: selectedMealRating,
+    note: document.getElementById('mealNote').value.trim(),
+    time: document.getElementById('mealTime').value || nowTime(),
+  });
+
+  selectedMealType = null;
+  selectedMealRating = null;
+  document.getElementById('mealNote').value = '';
+  document.querySelectorAll('#mealTypeChoices .choice, #mealRatingChoices .choice')
+    .forEach((b) => b.classList.remove('active'));
+
+  closeSheets();
+  renderAll();
+}
+
+function saveWorkout() {
+  const dur = parseNum(document.getElementById('workoutDuration').value);
+
+  if (!selectedWorkoutType || !dur) {
+    alert('Choose workout type and duration.');
+    return;
+  }
+
+  addEvent({
+    type: 'workout',
+    workout: selectedWorkoutType,
+    duration_min: dur,
+    time: document.getElementById('workoutTime').value || nowTime(),
+  });
+
+  selectedWorkoutType = null;
+  document.getElementById('workoutDuration').value = '';
+  document.querySelectorAll('#workoutTypeChoices .choice').forEach((b) => b.classList.remove('active'));
+
+  closeSheets();
+  renderAll();
+}
+
+function saveSleep() {
+  const hours = parseNum(document.getElementById('sleepHours').value);
+
+  if (!hours) {
+    alert('Enter sleep hours.');
+    return;
+  }
+
+  updateDay((day) => {
+    day.sleep_hours = hours;
+    day.events.push({
+      type: 'sleep',
+      hours,
+      time: document.getElementById('sleepTime').value || nowTime(),
+      id: makeId(),
+    });
+  });
+
+  document.getElementById('sleepHours').value = '';
+  closeSheets();
+  renderAll();
+}
+
+function saveWaist() {
+  const waist = parseNum(document.getElementById('waistValue').value);
+
+  if (!waist) {
+    alert('Enter waist in cm.');
+    return;
+  }
+
+  const chest = document.getElementById('chestNote').value;
+
+  updateDay((day) => {
+    day.waist_cm = waist;
+    day.chest_note = chest;
+    day.events.push({
+      type: 'waist',
+      waist_cm: waist,
+      note: chest,
+      time: document.getElementById('waistTime').value || nowTime(),
+      id: makeId(),
+    });
+  });
+
+  document.getElementById('waistValue').value = '';
+  document.getElementById('chestNote').value = '';
+  closeSheets();
+  renderAll();
+}
+
+function saveWalk() {
+  const dur = parseNum(document.getElementById('walkDuration').value);
+
+  if (!dur) {
+    alert('Enter walk duration.');
+    return;
+  }
+
+  addEvent({
+    type: 'walk',
+    duration_min: dur,
+    time: document.getElementById('walkTime').value || nowTime(),
+  });
+
+  document.getElementById('walkDuration').value = '';
+  closeSheets();
+  renderAll();
+}
+
+function openEditSheet(eventId) {
+  const day = getDay();
+  const event = (day.events || []).find((e) => e.id === eventId);
+  if (!event) return;
+
+  editEventMeta = { id: eventId, type: event.type };
+
+  let value = '';
+  if (event.type === 'water') value = event.amount_ml;
+  else if (event.type === 'meal') value = event.note || event.rating;
+  else if (event.type === 'workout' || event.type === 'walk') value = event.duration_min;
+  else if (event.type === 'sleep') value = event.hours;
+  else if (event.type === 'waist') value = event.waist_cm;
+
+  document.getElementById('editValue').value = value || '';
+  document.getElementById('editTime').value = event.time || nowTime();
+  openSheet('editSheet');
+}
+
+function saveEdit() {
+  if (!editEventMeta) return;
+
+  updateDay((day) => {
+    const idx = (day.events || []).findIndex((e) => e.id === editEventMeta.id);
+    if (idx < 0) return;
+
+    const event = day.events[idx];
+    const val = document.getElementById('editValue').value;
+    event.time = document.getElementById('editTime').value || event.time;
+
+    if (event.type === 'water') event.amount_ml = parseNum(val);
+    else if (event.type === 'meal') event.note = val;
+    else if (event.type === 'workout' || event.type === 'walk') event.duration_min = parseNum(val);
+    else if (event.type === 'sleep') {
+      event.hours = parseNum(val);
+      day.sleep_hours = parseNum(val);
+    } else if (event.type === 'waist') {
+      event.waist_cm = parseNum(val);
+      day.waist_cm = parseNum(val);
+    }
+  });
+
+  closeSheets();
+  renderAll();
+}
+
+function deleteEvent() {
+  if (!editEventMeta) return;
+
+  updateDay((day) => {
+    day.events = (day.events || []).filter((e) => e.id !== editEventMeta.id);
+  });
+
+  closeSheets();
+  renderAll();
+}
+
+function exportData() {
+  const payload = { data: getData(), settings: getSettings() };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'mediatown-fit-tracker-v3-2-data.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importData(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const imported = JSON.parse(reader.result);
+      if (imported.data) setData(imported.data);
+      else setData(imported);
+      if (imported.settings) setSettings(imported.settings);
+      renderAll();
+      initWeather();
+    } catch {
+      alert('Import failed. That file is not valid tracker data.');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function resetAll() {
+  if (!confirm('Reset all tracker data from this browser?')) return;
+  localStorage.removeItem(DATA_KEY);
+  localStorage.removeItem(SETTINGS_KEY);
+  location.reload();
+}
+
+function checkOnboarding() {
+  const s = getSettings();
+  if (!s.onboarded) document.getElementById('onboard').classList.add('show');
+}
+
+function finishOnboarding() {
+  const s = getSettings();
+  s.mode = document.getElementById('obGoal').value || 'fat_loss';
+  s.waterGoalL = parseNum(document.getElementById('obWaterGoal').value || 2.5);
+  s.city = document.getElementById('obCity').value || 'Toronto';
+  s.nudgeStyle = document.getElementById('obNudge').value || 'tough';
+  s.breakfast = document.getElementById('obBreakfast').value || '8:30 AM';
+  s.lunch = document.getElementById('obLunch').value || '12:30 PM';
+  s.dinner = document.getElementById('obDinner').value || '6:00 PM';
+  s.cutoff = document.getElementById('obCutoff').value || '8:00 PM';
+  s.onboarded = true;
+  setSettings(s);
+  document.getElementById('onboard').classList.remove('show');
+  renderAll();
+  fetchWeatherByCity(s.city);
+}
+
+function renderDayLabel() {
+  document.getElementById('dayLabel').textContent =
+    currentDay.toDateString() === new Date().toDateString()
+      ? 'Today'
+      : currentDay.toDateString();
+}
+
+function prevDay() {
+  currentDay.setDate(currentDay.getDate() - 1);
+  renderAll();
+}
+
+function nextDay() {
+  const tomorrow = new Date();
+  tomorrow.setHours(0, 0, 0, 0);
+
+  const candidate = new Date(currentDay);
+  candidate.setDate(candidate.getDate() + 1);
+
+  if (candidate > tomorrow) return;
+
+  currentDay = candidate;
+  renderAll();
+}
+
+function renderAll() {
+  ensureDay(dayKey());
+  loadSettingsUI();
+  renderDayLabel();
+  renderPlan();
+  renderTop();
+  renderActivityFeed();
+  renderCharts();
+  renderWeeklyTable();
+  renderWeatherCard();
+}
+
+function useCurrentLocation() {
+  if (!navigator.geolocation) {
+    alert('Geolocation not available on this device.');
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const s = getSettings();
+      s.lat = pos.coords.latitude;
+      s.lon = pos.coords.longitude;
+      setSettings(s);
+      fetchWeatherByCoords(s.lat, s.lon);
+    },
+    () => alert('Location permission denied.'),
+    { enableHighAccuracy: false, timeout: 5000, maximumAge: 3600000 },
+  );
+}
+
+function setupEvents() {
+  document.getElementById('prevDayBtn').addEventListener('click', prevDay);
+  document.getElementById('nextDayBtn').addEventListener('click', nextDay);
+  document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
+  document.getElementById('exportBtn').addEventListener('click', exportData);
+  document.getElementById('importBtn').addEventListener('click', () => {
+    document.getElementById('importFile').click();
+  });
+  document.getElementById('importFile').addEventListener('change', (e) => {
+    const f = e.target.files[0];
+    if (f) importData(f);
+  });
+  document.getElementById('clearBtn').addEventListener('click', resetAll);
+  document.getElementById('useLocationBtn').addEventListener('click', useCurrentLocation);
+  document.getElementById('finishOnboardingBtn').addEventListener('click', finishOnboarding);
+  document.getElementById('reviewDayBtn').addEventListener('click', markReviewed);
+  document.getElementById('saveEditBtn').addEventListener('click', saveEdit);
+  document.getElementById('deleteEventBtn').addEventListener('click', deleteEvent);
+
+  setChoiceGroup('waterChoices', (v) => { selectedWaterPreset = v; });
+  setChoiceGroup('mealTypeChoices', (v) => { selectedMealType = v; });
+  setChoiceGroup('mealRatingChoices', (v) => { selectedMealRating = v; });
+  setChoiceGroup('workoutTypeChoices', (v) => { selectedWorkoutType = v; });
+
+  document.querySelectorAll('[data-water]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      addEvent({
+        type: 'water',
+        amount_ml: parseNum(btn.dataset.water),
+        time: nowTime(),
+      });
+      renderAll();
+    });
+  });
+
+  document.getElementById('saveWaterBtn').addEventListener('click', saveWater);
+  document.getElementById('saveMealBtn').addEventListener('click', saveMeal);
+  document.getElementById('saveWorkoutBtn').addEventListener('click', saveWorkout);
+  document.getElementById('saveSleepBtn').addEventListener('click', saveSleep);
+  document.getElementById('saveWaistBtn').addEventListener('click', saveWaist);
+  document.getElementById('saveWalkBtn').addEventListener('click', saveWalk);
+  document.getElementById('openHealthBtn').addEventListener('click', () => {
+    window.location.href = 'x-apple-health://';
+  });
+}
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  document.getElementById('installBtn').classList.remove('hidden');
+  document.getElementById('installHelp').textContent = 'Install is available in this browser.';
+});
+
+document.getElementById('installBtn').addEventListener('click', async () => {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  await deferredPrompt.userChoice;
+  deferredPrompt = null;
+  document.getElementById('installBtn').classList.add('hidden');
+});
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+ensureDay();
+setupFAB();
+setupEvents();
+renderAll();
+checkOnboarding();
+initWeather();
