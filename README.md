@@ -1,15 +1,12 @@
-# MediaTown Fit Tracker
+# MediaTown Fit Tracker V3
 
-A lightweight installable PWA for tracking hydration, workouts, waist changes, meal timing, and daily consistency.
+Tap-first fitness tracker with:
+- floating action button
+- slide-up quick add drawers
+- event-based storage
+- water progress
+- weather-aware nudges
+- recent activity feed
+- score, streak, and charts
 
-## Features
-- Hero text: Track the work. Drop the excuses.
-- Today score, streak counter, waist trend
-- Fat-loss mode and general fitness mode
-- Local-first storage
-- JSON export/import
-- Offline-friendly after first load
-- Built by MediaTown
-
-## Deploy
-Static site. No build step required.
+Built by MediaTown.co
