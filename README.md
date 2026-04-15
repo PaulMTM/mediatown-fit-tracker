@@ -1,12 +1,11 @@
-# MediaTown Fit Tracker V3
+# MediaTown Fit Tracker V3.2
 
-Tap-first fitness tracker with:
-- floating action button
-- slide-up quick add drawers
-- event-based storage
-- water progress
-- weather-aware nudges
-- recent activity feed
-- score, streak, and charts
-
-Built by MediaTown.co
+Adds:
+- harsher discipline score
+- quick water buttons
+- editable event times
+- previous/next day navigation
+- onboarding questionnaire
+- city-based or device-based weather
+- tap to edit activity items
+- review day action
