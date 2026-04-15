@@ -1,30 +1,37 @@
 
-const KEY="mediatown_fit_tracker_v2";
+const KEY="mt_fit_tracker_data";
 
-function getStore(){
-return JSON.parse(localStorage.getItem(KEY)||"{}");
+function load(){
+const data=JSON.parse(localStorage.getItem(KEY)||"{}");
+
+Object.keys(data).forEach(k=>{
+const el=document.getElementById(k);
+if(!el)return;
+
+if(el.type==="checkbox"){
+el.checked=data[k];
+}else{
+el.value=data[k];
+}
+});
 }
 
 function save(){
-let store=getStore();
-let today=new Date().toISOString().slice(0,10);
+const fields=["workout","walk","protein","cutoff","water","steps","sleep","waist","notes"];
+let data={};
 
-store[today]={
-workout:document.getElementById("workout").checked,
-walk:document.getElementById("walk").checked,
-protein:document.getElementById("protein").checked,
-cutoff:document.getElementById("cutoff").checked,
-water:document.getElementById("water").value,
-steps:document.getElementById("steps").value,
-sleep:document.getElementById("sleep").value,
-waist:document.getElementById("waist").value,
-notes:document.getElementById("notes").value
-};
+fields.forEach(f=>{
+const el=document.getElementById(f);
+if(el.type==="checkbox"){
+data[f]=el.checked;
+}else{
+data[f]=el.value;
+}
+});
 
-localStorage.setItem(KEY,JSON.stringify(store));
+localStorage.setItem(KEY,JSON.stringify(data));
+
 document.getElementById("status").innerText="Saved.";
 }
 
-if("serviceWorker" in navigator){
-navigator.serviceWorker.register("sw.js");
-}
+window.onload=load;

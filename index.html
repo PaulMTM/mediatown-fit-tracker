@@ -1,80 +1,112 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<meta name="theme-color" content="#FAFAFB" />
-<link rel="manifest" href="manifest.webmanifest" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MediaTown Fit Tracker</title>
+<link rel="manifest" href="manifest.webmanifest">
 <style>
-:root{
---bg:#FAFAFB;
---panel:#FFFFFF;
---text:#0F110F;
---muted:#5B605B;
---line:#E7E9EC;
---accent:#95BF47;
---radius:999px;
-font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+body{
+font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;
+background:#f5f6f7;
+margin:0;
+padding:20px;
+color:#111;
 }
-body{margin:0;background:var(--bg);color:var(--text);padding:20px;}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:20px;margin-bottom:16px;}
-h1{font-size:2rem;margin-bottom:6px;}
-button{border:none;border-radius:var(--radius);padding:12px 18px;font-weight:700;background:var(--accent);cursor:pointer;}
+.container{
+max-width:900px;
+margin:auto;
+}
+.card{
+background:white;
+border-radius:20px;
+padding:20px;
+margin-bottom:20px;
+box-shadow:0 8px 24px rgba(0,0,0,0.05);
+}
+h1{
+margin-top:0;
+}
+.grid{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:10px;
+}
 input,textarea{
 width:100%;
-border-radius:var(--radius);
-border:1px solid var(--line);
 padding:12px;
-margin-top:6px;
-background:#F3F4F6;
+border-radius:12px;
+border:1px solid #ddd;
+font-size:16px;
 }
-.grid{display:grid;gap:14px;}
-.grid-2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr));}
-.muted{color:var(--muted);font-size:.9rem;}
+button{
+background:#95BF47;
+border:none;
+padding:14px 18px;
+border-radius:999px;
+font-weight:700;
+cursor:pointer;
+}
+.small{
+font-size:13px;
+color:#666;
+}
 </style>
 </head>
+
 <body>
+
+<div class="container">
 
 <div class="card">
 <h1>MediaTown Fit Tracker</h1>
-<p class="muted">Simple daily discipline tracker. Installable. No login. No database.</p>
+<p class="small">Simple daily discipline tracker. No login. Your data stays on your device.</p>
 </div>
-
-<div class="grid grid-2">
 
 <div class="card">
 <h2>Daily Checklist</h2>
-<label><input type="checkbox" id="workout"/> Workout completed</label><br>
-<label><input type="checkbox" id="walk"/> Walk after dinner</label><br>
-<label><input type="checkbox" id="protein"/> Protein‑focused meals</label><br>
-<label><input type="checkbox" id="cutoff"/> Stopped eating on time</label>
+<label><input type="checkbox" id="workout"> Workout completed</label><br>
+<label><input type="checkbox" id="walk"> Walk after dinner</label><br>
+<label><input type="checkbox" id="protein"> Protein focused meals</label><br>
+<label><input type="checkbox" id="cutoff"> Stopped eating on time</label>
 </div>
 
 <div class="card">
 <h2>Daily Log</h2>
 
+<div class="grid">
+<div>
 <label>Water (litres)</label>
-<input id="water" type="number" step="0.1"/>
+<input type="number" id="water">
+</div>
 
+<div>
 <label>Steps</label>
-<input id="steps" type="number"/>
+<input type="number" id="steps">
+</div>
 
+<div>
 <label>Sleep (hours)</label>
-<input id="sleep" type="number" step="0.1"/>
+<input type="number" id="sleep">
+</div>
 
+<div>
 <label>Waist (cm)</label>
-<input id="waist" type="number" step="0.1"/>
+<input type="number" id="waist">
+</div>
+</div>
 
-<label>Notes</label>
+<label style="margin-top:10px;display:block;">Notes</label>
 <textarea id="notes"></textarea>
 
 <br><br>
-<button onclick="save()">Save today</button>
 
-<p class="muted" id="status"></p>
+<button onclick="save()">Save today</button>
+<p class="small" id="status"></p>
 
 </div>
+
 </div>
 
 <script src="app.js"></script>
